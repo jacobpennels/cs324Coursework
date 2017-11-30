@@ -11,22 +11,47 @@
 #include <unistd.h>
 
 // properties of some material
-float mat_ambient[] = {0.5, 0.5, 0.5, 1.0};
+float mat_ambient[] = {1.0, 0.0, 0.0, 0.25};
 float mat_diffuse[] = {0.75, 0.75, 0.75, 1.0};
-float mat_specular[] = {1.0, 1.0, 1.0, 1.0};
+float mat_specular[] = {0.1, 0.1, 0.1, 0.1};
 float mat_shininess[] = {50.0};
 
 float t_l[2] = {-0.4f, 0.9f};
 float t_r[2] = {0.4f, 0.9f};
 float b_l[2] = {-0.4f, -0.7f};
 float b_r[2] = {0.4f, -0.7f};
+
 float height = t_l[1] - b_l[1];
 float width = t_r[0] - t_l[0];
+
+float cube_size = height / 20.0f;
 
 float eye_x = 0.0f;
 float eye_y = 0.0f;
 
 int arena[10][20];
+
+// Define some cube bits
+float cube_vertices[8][3] = {
+		{0.0f, 0.0f, -(cube_size / 2.0f)},
+		{cube_size, 0.0f, -(cube_size / 2.0f)},
+		{cube_size, cube_size, -(cube_size / 2.0f)},
+		{0.0f, cube_size, -(cube_size / 2.0f)},
+		{0.0f, 0.0f, (cube_size / 2.0f)}, 
+		{cube_size, 0.0f, (cube_size / 2.0f)},
+		{cube_size, cube_size, (cube_size / 2.0f)},
+		{0.0f, cube_size, (cube_size / 2.0f)}
+};
+
+// indices into verices
+size_t cube_faces[6][4] = {
+		{0, 1, 2, 3},
+		{5, 4, 7, 6},
+		{4, 0, 3, 7},
+		{1, 5, 6, 2},
+		{4, 5, 1, 0},
+		{3, 2, 6, 7} 
+};
 
 int g_spin = 0;
 bool g_spinning = false;
@@ -49,18 +74,6 @@ void display()
 			  0, 0, 0, // reference point
 			  0, 1, 0  // up vector
 		);
-
-	//glRotatef(g_spin, 0, 1, 0);
-	/*
-	// set the surface properties
-	glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
-	glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
-	glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
-	glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
-
-	// show opaque geometry
-	glutSolidTeapot(0.4);
-	*/
 
 	// add in transparent geometry in front of teapot
 	glDisable(GL_LIGHTING);
@@ -96,10 +109,24 @@ void display()
 			glVertex3f(b_r[0], b_l[1] + (i * (height / 20)), 0.0f);
 		}
 	glEnd();
-	
 	glEnable(GL_LIGHTING);
-
 	
+	glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
+
+	glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
+	glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
+	glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
+	glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
+	
+	glPushMatrix();
+		glTranslatef(cube_size / 2, cube_size / 2, 0);
+		glTranslatef(b_l[0], b_l[1], 0.0f);
+		glutSolidCube(cube_size);
+		glPushMatrix();
+			glTranslatef(cube_size, 0.0f, 0.0f);
+			glutSolidCube(cube_size);
+		glPopMatrix();
+	glPopMatrix();
 	glutSwapBuffers(); 
 }
 
