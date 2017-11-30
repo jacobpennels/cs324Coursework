@@ -16,6 +16,13 @@ float mat_diffuse[] = {0.75, 0.75, 0.75, 1.0};
 float mat_specular[] = {1.0, 1.0, 1.0, 1.0};
 float mat_shininess[] = {50.0};
 
+float t_l[2] = {-0.4f, 0.9f};
+float t_r[2] = {0.4f, 0.9f};
+float b_l[2] = {-0.4f, -0.7f};
+float b_r[2] = {0.4f, -0.7f};
+float height = t_l[1] - b_l[1];
+float width = t_r[0] - t_l[0];
+
 float eye_x = 0.0f;
 float eye_y = 0.0f;
 
@@ -61,33 +68,32 @@ void display()
 	glColor4f(0.0f, 1.0f, 0.0f, 0.25f);
 	glLineWidth(0.1f);
 	glBegin(GL_QUADS);
-		glVertex3f(-0.4f, 0.9f, 0.05f);
-		glVertex3f(-0.4f, -0.7f, 0.05f);
-		glVertex3f(-0.4f, -0.7f, -0.05f);
-		glVertex3f(-0.4f, 0.9f, -0.05f);
+		glVertex3f(t_l[0], t_l[1], 0.05f);
+		glVertex3f(b_l[0], b_l[1], 0.05f);
+		glVertex3f(b_l[0], b_l[1], -0.05f);
+		glVertex3f(t_l[0], t_l[1], -0.05f);
 		
-		glVertex3f(-0.4f, -0.7f, 0.05f);
-		glVertex3f(0.4f, -0.7f, 0.05f);
-		glVertex3f(0.4f, -0.7f, -0.05f);
-		glVertex3f(-0.4f, -0.7f, -0.05f);
+		glVertex3f(b_l[0], b_l[1], 0.05f);
+		glVertex3f(b_r[0], b_r[1], 0.05f);
+		glVertex3f(b_r[0], b_r[1], -0.05f);
+		glVertex3f(b_l[0], b_l[1], -0.05f);
 	
-		glVertex3f(0.4f, -0.7f, 0.05f);
-		glVertex3f(0.4f, 0.9f, 0.05f);
-		glVertex3f(0.4f, 0.9f, -0.05f);
-		glVertex3f(0.4f, -0.7f, -0.05f);
+		glVertex3f(b_r[0], b_r[1], 0.05f);
+		glVertex3f(t_r[0], t_r[1], 0.05f);
+		glVertex3f(t_r[0], t_r[1], -0.05f);
+		glVertex3f(b_r[0], b_r[1], -0.05f);
 	glEnd();
 	
 	glBegin(GL_LINES);
 		glColor4f(1.0f, 1.0f, 1.0f, 0.25f);
-		float height = 1.6f;
-		float width = 0.8f;
+
 		for(int i = 1; i < 10; i++) {
-			glVertex3f(-0.4f + (i * (width / 10)), -0.7f, 0.0f);
-			glVertex3f(-0.4f + (i * (width / 10)), 0.9f, 0.0f);
+			glVertex3f(b_l[0] + (i * (width / 10)), b_l[1], 0.0f);
+			glVertex3f(b_l[0] + (i * (width / 10)), t_l[1], 0.0f);
 		}
 		for(int i = 1; i < 20; i++) {
-			glVertex3f(-0.4f, -0.7f + (i * (height / 20)), 0.0f);
-			glVertex3f(0.4f, -0.7f + (i * (height / 20)), 0.0f);
+			glVertex3f(b_l[0], b_l[1] + (i * (height / 20)), 0.0f);
+			glVertex3f(b_r[0], b_l[1] + (i * (height / 20)), 0.0f);
 		}
 	glEnd();
 	
