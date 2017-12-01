@@ -1,83 +1,172 @@
 #ifdef __APPLE__
 #include <GLUT/glut.h> 
 #else
+#include <GL/glew.h> 
 #include <GL/glut.h> 
 #endif
 
-#include <iostream>
-
+#include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <unistd.h>
+#include <time.h>
 
-// properties of some material
-float mat_ambient[] = {1.0, 0.0, 0.0, 0.25};
-float mat_diffuse[] = {0.75, 0.75, 0.75, 1.0};
-float mat_specular[] = {0.1, 0.1, 0.1, 0.1};
-float mat_shininess[] = {50.0};
+#include "draw_text.h"
+#include "lights_material.h"
+#include "create_and_compile_shaders.h"
+//#include "tetris_control.h"
+
+bool g_spinning = false;
+int g_angle = 0;
 
 float t_l[2] = {-0.4f, 0.9f};
 float t_r[2] = {0.4f, 0.9f};
 float b_l[2] = {-0.4f, -0.7f};
 float b_r[2] = {0.4f, -0.7f};
 
+float red[4] = {1.0f, 0.0f, 0.0f, 0.75f};
+float green[4] = {0.0f, 1.0f, 0.0f, 0.75f};
+float blue[4] = {0.0f, 0.0f, 1.0f, 0.75f};
+
 float height = t_l[1] - b_l[1];
 float width = t_r[0] - t_l[0];
+const int arena_h = 22;
+const int arena_w = 10;
+int arena[arena_w][arena_h] = { 0 }; // [x][y] 10x20 grid with 2 on top for new pieces to spawn in
+const int spawn_point[2] = {4, 20};
 
 float cube_size = height / 20.0f;
 
-float eye_x = 0.0f;
-float eye_y = 0.0f;
-
-int arena[10][20];
-
-// Define some cube bits
-float cube_vertices[8][3] = {
-		{0.0f, 0.0f, -(cube_size / 2.0f)},
-		{cube_size, 0.0f, -(cube_size / 2.0f)},
-		{cube_size, cube_size, -(cube_size / 2.0f)},
-		{0.0f, cube_size, -(cube_size / 2.0f)},
-		{0.0f, 0.0f, (cube_size / 2.0f)}, 
-		{cube_size, 0.0f, (cube_size / 2.0f)},
-		{cube_size, cube_size, (cube_size / 2.0f)},
-		{0.0f, cube_size, (cube_size / 2.0f)}
+float eye_x = 0.05f;
+float eye_y = 0.05f;
+// define block shapes, based on point of rotation as origin (rotations are clockwise)
+const int t_block[4][4][2] = {
+	{{0,0}, {1,0}, {-1,0}, {0,1}},
+	{{0,0}, {1,0}, {0,1}, {0,-1}},
+	{{0,0}, {1,0}, {-1,0}, {0,-1}},
+	{{0,0}, {-1,0}, {0,-1}, {0,1}}
 };
 
-// indices into verices
-size_t cube_faces[6][4] = {
-		{0, 1, 2, 3},
-		{5, 4, 7, 6},
-		{4, 0, 3, 7},
-		{1, 5, 6, 2},
-		{4, 5, 1, 0},
-		{3, 2, 6, 7} 
-};
+int c_y = spawn_point[1];
+int c_rotation = 0;
+int c_piece[4][2] = { 0 };
+int c_type = 1;
+clock_t begin_time;
 
-int g_spin = 0;
-bool g_spinning = false;
+unsigned int g_program_obj = 0;
 
-void idle()
-{
-	usleep(300000);
-	g_spin += 5;
-	glutPostRedisplay();
+float g_light0_position[] = {1.0f, 1.0f, 2.0f, 0.0f};
+
+void spawn_block(int t) {
+	switch(t) {
+		case 1:
+			for(int i = 0; i < 4; i++) {
+				for(int j = 0; j < 2; j++) {
+					c_piece[i][j] = spawn_point[j] + t_block[c_rotation][i][j];
+				}
+			}
+	}
 }
 
-void display()
-{
+void draw_arena(float c_size) {
+	// Takes the array and draws the blocks that are currently in play
+	for(int i = 0; i < arena_w; i++) {
+		for(int j = 0; j < arena_h; j++) {
+			switch(arena[i][j]) {
+				case 1: glColor4fv(red); break;
+				case 2: glColor4fv(green); break;
+				case 3: glColor4fv(blue); break;
+				case 8: glColor4fv(blue); break;
+				default: continue;
+			}
+			glPushMatrix();
+				glTranslatef(c_size * i, c_size * j, 0.0f);
+				glutSolidCube(c_size);
+				/*
+				glColor4f(0.0f, 0.0f, 0.0f, 1.0f);
+				glLineWidth(2.0f);
+				glutWireCube(c_size - 0.01);
+				*/
+			glPopMatrix();
+		}
+	}
+}
+
+void update_arena() { // Moves down the current piece, checking there is space to do so
+	bool clear = true;
+	int temp_x = 0;
+	int temp_y = 0;
+	int block_below = 0;
+	for(int i = 0; i < 4; i++) {
+		temp_x = c_piece[i][0];
+		temp_y = c_piece[i][1];
+		block_below = arena[temp_x][temp_y - 1];
+		printf("At point (%d, %d), the block below is %d\n", temp_x, temp_y, block_below);
+		if(block_below != 0 && block_below != 8) {
+			clear = false;
+			c_type = 0;
+			c_y = spawn_point[1];
+		}
+	}
+
+	if(clear) {
+		for(int i = 0; i < 4; i++) {
+			arena[c_piece[i][0]][c_piece[i][1]] = 0;
+			arena[c_piece[i][0]][c_piece[i][1] - 1] = 8;
+			c_piece[i][1] -= 1;
+			c_y -= 1;
+		}
+	}
+	draw_arena(cube_size);
+}
+
+void idle() {
+	if(float(clock() - begin_time) / CLOCKS_PER_SEC > 0.1f) {
+		//printf("A second has passed\n");
+		begin_time = clock();
+		if(c_type != 0) {
+			update_arena();
+		} else {
+			draw_arena(cube_size);
+		}
+		glutPostRedisplay();
+	}
+	usleep(10);
+}
+
+void display() {
 	glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT); 
 	
 	// position and orient camera
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-	gluLookAt(eye_x, eye_y, 3, // eye position
+	gluLookAt(eye_x, eye_y, 1.0f, // eye position
 			  0, 0, 0, // reference point
 			  0, 1, 0  // up vector
 		);
+	
+	glEnable(GL_LIGHTING);
+	glUseProgram(g_program_obj);
+	glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
 
-	// add in transparent geometry in front of teapot
-	glDisable(GL_LIGHTING);
+	glPushMatrix();
+		glTranslatef(cube_size / 2, cube_size / 2, 0); // Draws from centre, so translates so draws from bottom left corner
+		glTranslatef(b_l[0], b_l[1], 0.0f); // put cursor in bottom left corner of arena
+		draw_arena(cube_size);
+	glPopMatrix();
+	glUseProgram(0);
 
+	glDisable(GL_LIGHTING); // Draw arena borders
+	/*
+	glBegin(GL_QUADS);
+		glColor4f(0.66f, 0.66f, 0.66f, 1.0f);
+
+		glVertex3f(b_r[0], b_r[1], -0.05f);
+		glVertex3f(b_l[0], b_l[1], -0.05f);
+		glVertex3f(t_l[0], t_l[1], -0.05f);
+		glVertex3f(t_r[0], t_r[1], -0.05f);
+	glEnd();
+	*/
 	glColor4f(0.0f, 1.0f, 0.0f, 0.25f);
 	glLineWidth(0.1f);
 	glBegin(GL_QUADS);
@@ -96,44 +185,24 @@ void display()
 		glVertex3f(t_r[0], t_r[1], -0.05f);
 		glVertex3f(b_r[0], b_r[1], -0.05f);
 	glEnd();
-	
-	glBegin(GL_LINES);
-		glColor4f(1.0f, 1.0f, 1.0f, 0.25f);
 
-		for(int i = 1; i < 10; i++) {
-			glVertex3f(b_l[0] + (i * (width / 10)), b_l[1], 0.0f);
-			glVertex3f(b_l[0] + (i * (width / 10)), t_l[1], 0.0f);
-		}
-		for(int i = 1; i < 20; i++) {
-			glVertex3f(b_l[0], b_l[1] + (i * (height / 20)), 0.0f);
-			glVertex3f(b_r[0], b_l[1] + (i * (height / 20)), 0.0f);
-		}
-	glEnd();
 	glEnable(GL_LIGHTING);
-	
-	glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
 
-	glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
-	glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
-	glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
-	glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
-	
-	glPushMatrix();
-		glTranslatef(cube_size / 2, cube_size / 2, 0);
-		glTranslatef(b_l[0], b_l[1], 0.0f);
-		glutSolidCube(cube_size);
-		glPushMatrix();
-			glTranslatef(cube_size, 0.0f, 0.0f);
-			glutSolidCube(cube_size);
-		glPopMatrix();
-	glPopMatrix();
-	glutSwapBuffers(); 
+	glutSwapBuffers();
 }
 
-void keyboard(unsigned char key, int, int)
-{
-	switch (key)
-	{
+void reshape(int w, int h) {
+	glViewport(0, 0, w, h); 
+	glMatrixMode(GL_PROJECTION); 
+	glLoadIdentity();
+	//gluPerspective(40.0, 1.0f, 1.0, 5.0);
+	glOrtho(-1.2, 1.2, -1.2, 1.2, -4.0, 4.0);
+
+	glutPostRedisplay();
+}
+
+void keyboard(unsigned char key, int, int) {
+	switch (key) {
 		case 'q': exit(1); break;
 
 		case ' ': g_spinning = !g_spinning;
@@ -147,56 +216,97 @@ void keyboard(unsigned char key, int, int)
 		case 'd': eye_x += 0.1f; break;
 		case 'a': eye_x -= 0.1f; break;
 	}
+	printf("x: %f, y: %f", eye_x, eye_y);
 	glutPostRedisplay();
 }
 
-void reshape(int w, int h)
-{
-	glViewport(0, 0, w, h); 
-	glMatrixMode(GL_PROJECTION); 
-	glLoadIdentity();
-	gluPerspective(40.0, 1.0f, 1.0, 5.0);
+void init(int argc, char* argv[]) {
+	if (argc==3)
+		g_program_obj = create_and_compile_shaders(argv[1], NULL, argv[2]);
+	else
+	if (argc==4)
+		g_program_obj = create_and_compile_shaders(argv[1], argv[2], argv[3]);
 
-	glutPostRedisplay();
-}
+	// re-link geometry shader if change the primitive assembly type
+	if (g_program_obj)
+	{
+		set_geometry_shader_params(g_program_obj, GL_LINES, GL_LINE_STRIP, 4);
+	}
 
-void init()
-{
-	float light_ambient[] = {0.1, 0.1, 0.1, 1.0};
-	float light_diffuse[] = {0.5, 0.5, 0.5, 1.0};
-	glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient);
-	glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
-
-	float light_position[] = {1.0, 1.0, 2.0, 0.0};
-	glLightfv(GL_LIGHT0, GL_POSITION, light_position);
-
-	glEnable(GL_LIGHTING);
-	glEnable(GL_LIGHT0);
-
-	glEnable(GL_DEPTH_TEST);
-	glShadeModel(GL_SMOOTH); 
-
-	// turn on blending and set a blending function
+	init_lights(GL_SMOOTH);
 	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+	//init_material();
+
+	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 }
 
-int main(int argc, char* argv[])
-{
-	glutInit(&argc, argv); 
-	
-	glutInitDisplayMode(GLUT_DOUBLE|GLUT_RGBA|GLUT_DEPTH); 
+int main(int argc, char* argv[]) {
+	/*
+	for(int i = 0; i < 10; i++) {
+		for(int j = 0; j< 20; j++) {
+			printf("%d\n", arena[i][j]);
+		}
+	}
+	*/
+	// test blocks
+	spawn_block(1);
 
-	glutInitWindowSize(512, 512); 
+	for(int i = 0; i < 4; i++) {
+		arena[c_piece[i][0]][c_piece[i][1]] = 8;
+	}
+	
+
+	arena[0][0] = 1;
+	arena[1][0] = 1;
+	arena[2][0] = 1;
+	arena[1][1] = 1;
+
+	arena[9][0] = 2;
+	arena[9][1] = 2;
+	arena[9][2] = 2;
+	arena[9][3] = 2;
+
+	arena[3][0] = 3;
+	arena[4][0] = 3;
+	arena[3][1] = 3;
+	arena[2][1] = 3;
+	begin_time = clock();
+
+	glutInit(&argc, argv); 
+
+	glutInitDisplayMode(
+			// GLUT_3_2_CORE_PROFILE| // this will give you GLSL 1.5 on -- be careful what you wish for
+			GLUT_DOUBLE|GLUT_RGBA|GLUT_DEPTH); 
+
+	glutInitWindowSize(768, 768); 
 	glutInitWindowPosition(50, 50); 
 
-	glutCreateWindow("Blending"); 
+	glutCreateWindow("Tetris"); 
+
+#ifndef __APPLE__ 
+	GLenum err = glewInit();
+	if (GLEW_OK!=err)
+	{
+		fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
+		exit(1);
+	}
+
+	fprintf(stderr, "Using GLEW %s\n", glewGetString(GLEW_VERSION));
+#endif
 
 	glutKeyboardFunc(keyboard); 
 	glutReshapeFunc(reshape); 
 	glutDisplayFunc(display); 
+	glutIdleFunc(idle); 
 
-	init(); 
+	fprintf(stderr, "Open GL Engine = %s\nVersion =  %s\n", 
+				glGetString(GL_RENDERER), 
+				glGetString(GL_VERSION)
+			);
+
+	init(argc, argv); 
 
 	glutMainLoop(); 
 
