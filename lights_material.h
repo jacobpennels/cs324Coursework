@@ -5,7 +5,7 @@
 // some magic to set up lights and smooth shading
 void init_lights(const GLenum shade_model=GL_FLAT)
 {
-	float light0_position[] = {0.0, 1.0, 2.0, 0.0};
+	float light0_position[] = {0.0, 1.0, -2.0, 0.0};
 	float light1_position[] = {-2.0, 0.0, 2.0, 0.0};
 	float light_ambient[] = {0.1, 0.1, 0.1, 1.0};
 	float light_diffuse[] = {0.5, 0.5, 0.5, 1.0};
