@@ -5,9 +5,8 @@
 // some magic to set up lights and smooth shading
 void init_lights(const GLenum shade_model=GL_FLAT)
 {
-	float light0_position[] = {0.0, 1.0, -2.0, 0.0};
-	float light1_position[] = {-2.0, 0.0, 2.0, 0.0};
-	float light_ambient[] = {0.1, 0.1, 0.1, 1.0};
+	float light0_position[] = {1.0, 1.0, 2.0, 0.0};
+	float light_ambient[] = {0.5, 0.5, 0.5, 1.0};
 	float light_diffuse[] = {0.5, 0.5, 0.5, 1.0};
 	float light_specular[] = {0.7, 0.7, 0.7, 1.0};
 
@@ -15,10 +14,6 @@ void init_lights(const GLenum shade_model=GL_FLAT)
 	glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
 	glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
 	glLightfv(GL_LIGHT0, GL_POSITION, light0_position);
-
-	glLightfv(GL_LIGHT1, GL_AMBIENT, light_ambient);
-	glLightfv(GL_LIGHT1, GL_DIFFUSE, light_diffuse);
-	glLightfv(GL_LIGHT1, GL_POSITION, light1_position);
 
     glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, 0);
 

@@ -17,7 +17,9 @@
 #include "block.h"
 //#include "tetris_control.h"
 
-float difficulty = 1.0f;
+float difficulty = 0.75f;
+float speed_up = 1.0f;
+bool game_over = false;
 
 float t_l[2] = {-0.4f, 0.9f};
 float t_r[2] = {0.4f, 0.9f};
@@ -49,6 +51,7 @@ int c_rotation = 0;
 int c_piece[4][2] = { 0 };
 int c_type = 0;
 clock_t begin_time;
+int full_lines[arena_h] = { 0 }; // Stores lines that are full and can be cleared 
 
 // Variables for storing keyboard inputs
 bool key_pressed = false;
@@ -69,6 +72,7 @@ void print_arena() {
 
 void spawn_block(int t) {
 	// 1 = t, 2 = l, 3 = j, 4 = z, 5 = s, 6 = i, 7 = o
+	// For the given type, form the coordinates for that block
 	switch(t) {
 		case 1:
 			for(int i = 0; i < 4; i++) {
@@ -122,13 +126,54 @@ void spawn_block(int t) {
 	}
 }
 
+void get_lookahead(float c_size) {
+	// Take current piece and draw lookahead outline
+	// Select the right colour
+	switch(c_type) {
+		case 1: glColor4fv(t_colour); break;
+		case 2: glColor4fv(l_colour); break;
+		case 3: glColor4fv(j_colour); break;
+		case 4: glColor4fv(z_colour); break;
+		case 5: glColor4fv(s_colour); break;
+		case 6: glColor4fv(i_colour); break;
+		case 7: glColor4fv(o_colour); break;
+	}
+
+	int min_distance = 23;
+	for(int i = 0; i < 4; i++) {
+		int t = c_piece[i][1];
+		if(t < min_distance) { // reached bottom of arena
+			min_distance = t;
+		}
+		for(int y = t - 1; y >= 0; y--) {
+			if(arena[c_piece[i][0]][y] != 0 && arena[c_piece[i][0]][y] != 8) { 
+				// Reached the closest block below
+				int dis = (t - y) - 1;
+				if(dis < min_distance) {
+					min_distance = dis;
+				}
+				break;
+			}	
+		}
+	}
+
+	for(int i = 0; i < 4; i++) {
+		glPushMatrix();
+			glTranslatef(c_size * c_piece[i][0], c_size * (c_piece[i][1] - min_distance), 0.0f);
+			glutWireCube(c_size - 0.01);
+		glPopMatrix();
+	}
+}
+
 void draw_arena(float c_size) {
 	// Takes the array and draws the blocks that are currently in play
+	bool block_in_arena = false;
 	for(int i = 0; i < arena_w; i++) {
 		for(int j = 0; j < arena_h; j++) {
 			int current_type = arena[i][j];
 			if(current_type == 8) {
 				current_type = c_type;
+				block_in_arena = true;
 			}
 			switch(current_type) {
 				case 1: glColor4fv(t_colour); break;
@@ -151,9 +196,12 @@ void draw_arena(float c_size) {
 			glPopMatrix();
 		}
 	}
+	if(block_in_arena) {
+		get_lookahead(c_size);
+	}
 }
 
-void update_arena() { // Moves down the current piece, checking there is space to do so
+void update_arena() { // Moves down the current piece, checking there is space to do so, if not stopping the piece
 	bool clear = true;
 	int temp_x = 0;
 	int temp_y = 0;
@@ -195,7 +243,7 @@ void update_arena() { // Moves down the current piece, checking there is space t
 }
 
 void move_left() {
-	// move
+	// moves the current piece to left
 	bool clear = true;
 	for(int i = 0; i < 4; i++) {
 		int temp_x = c_piece[i][0];
@@ -227,7 +275,7 @@ void move_left() {
 }
 
 void move_right() {
-	// move
+	// moves current piece to right
 	bool clear = true;
 	for(int i = 0; i < 4; i++) {
 		int temp_x = c_piece[i][0];
@@ -259,6 +307,7 @@ void move_right() {
 }
 
 void rotate_block(int dir) {
+	// Follows SRS rotation rules, implements the 'wallkick' feature found in traditional tetris
 	if(dir) {
 		// Clockwise
 		c_rotation += 1;
@@ -305,7 +354,7 @@ void rotate_block(int dir) {
 	for(int i = 0; i < 4; i++) {
 		int block = arena[c_piece[i][0]][c_piece[i][1]];
 		if(block != 8 && block != 0) {
-			// moved into another block
+			// moved into another block, so rotation is illegal
 			unsafe = true;
 		}
 	}
@@ -331,19 +380,90 @@ void rotate_block(int dir) {
 	}
 }
 
+void check_for_lines() {
+	// Checks for full lines, and clear them
+	// Uses naive gravity - blocks fall only by the number of line cleared below them
+	for(int j = 0; j < arena_h; j++) {
+		full_lines[j] = 1;
+		for(int i = 0; i < arena_w; i++) {
+			if(arena[i][j] == 0) {
+				full_lines[j] = 0;
+			}
+		}
+	}
+	/*
+	for(int i = 0; i < arena_h; i++) {
+		printf("%d ", full_lines[i]);
+	}
+	printf("\n");
+	*/
+	for(int i = 0; i < arena_h; i++) {
+		if(full_lines[i] == 1) {
+			for(int j = 0; j <  arena_w; j++) {
+				arena[j][i] = 0; // Clear the layer that needs to be cleared
+			}
+		}
+	}
+
+	for(int i = arena_h - 1; i >= 0; i--) {
+		if(full_lines[i] == 1) {
+			for(int x = 0; x < arena_w; x++) {
+				for(int y = i + 1; y < arena_h; y++) {
+					int t = arena[x][y];
+					arena[x][y] = 0;
+					arena[x][y-1] = t;
+				}
+			}
+		}
+	}
+}
+
+void check_for_defeat() {
+	for(int i = 0; i < arena_w; i++) {
+		for(int j = 20; j < arena_h; j++) {
+			if(arena[i][j] != 0) {
+				// Block outside of the play area
+				game_over = true;
+			}
+		}
+	}
+}
+
+void reset_arena() {
+	// Clear arena for new game
+	for(int i = 0; i < arena_w; i++) {
+		for(int j = 0; j < arena_h; j++) {
+			arena[i][j] = 0;
+		}
+	}
+}
+
 void timer(int) {
-	//printf("Been a second\n");
+	// This is run once a second and provides basic clock for moving the piece down
+	game_over = false;
 	if(c_type != 0) {
 		update_arena();
 	} else {
-		c_pos[0] = spawn_point[0];
-		c_pos[1] = spawn_point[1];
-		c_rotation = 0;
-		c_type = rand() % 7 + 1;
-		spawn_block(c_type);
+		check_for_defeat();
+		if(!game_over) {
+			check_for_lines();
+			c_pos[0] = spawn_point[0];
+			c_pos[1] = spawn_point[1];
+			c_rotation = 0;
+			c_type = rand() % 7 + 1;
+			//printf("%d\n", c_type);
+			spawn_block(c_type);
+			speed_up = 1.0f; // Reset to normal fall rate
+		} else { // Game over
+			printf("GAME OVER\n");
+			reset_arena();
+			glutPostRedisplay();
+			glutTimerFunc(5000, timer, 0);
+			return;
+		}
 	}
 	glutPostRedisplay();
-	glutTimerFunc((int)(1000.0f * difficulty), timer, 0);
+	glutTimerFunc((int)(1000.0f * difficulty * speed_up), timer, 0);
 }
 
 void display() {
@@ -356,53 +476,61 @@ void display() {
 			  0, 0, 0, // reference point
 			  0, 1, 0  // up vector
 		);
-	glPushMatrix();
-		glRotatef(-20.0f, 0.0f, 1.0f, 0.0f); // Adjust to show 3D
-		glRotatef(-15.0f, 1.0f, 0.0f, 0.0f);
 
+	if(game_over) {
+		glDisable(GL_LIGHTING);
+	        // put some help on the screen
+	        draw_text(500, 500, "GAME OVER");
 		glEnable(GL_LIGHTING);
-		glUseProgram(g_program_obj);
-		glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
-
+	} else {
 		glPushMatrix();
-			glTranslatef(cube_size / 2, cube_size / 2, 0); // Draws from centre, so translates so draws from bottom left corner
-			glTranslatef(b_l[0], b_l[1], 0.0f); // put cursor in bottom left corner of arena
-			draw_arena(cube_size);
-		glPopMatrix();
-		glUseProgram(0);
+			glRotatef(-20.0f, 0.0f, 1.0f, 0.0f); // Adjust to show 3D
+			glRotatef(-15.0f, 1.0f, 0.0f, 0.0f);
 
-		glDisable(GL_LIGHTING); // Draw arena borders
-		/*
-		glBegin(GL_QUADS);
-			glColor4f(0.66f, 0.66f, 0.66f, 1.0f);
+			glEnable(GL_LIGHTING);
+			glUseProgram(g_program_obj);
+			glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
 
-			glVertex3f(b_r[0], b_r[1], -0.05f);
-			glVertex3f(b_l[0], b_l[1], -0.05f);
-			glVertex3f(t_l[0], t_l[1], -0.05f);
-			glVertex3f(t_r[0], t_r[1], -0.05f);
-		glEnd();
-		*/
-		glColor4f(0.0f, 1.0f, 0.0f, 1.0f);
-		glLineWidth(0.1f);
-		glBegin(GL_QUADS);
-			glVertex3f(t_l[0] - 0.01, t_l[1] + 0.01, 0.05f);
-			glVertex3f(b_l[0] - 0.01, b_l[1] - 0.01, 0.05f);
-			glVertex3f(b_l[0] - 0.01, b_l[1] - 0.01, -0.05f);
-			glVertex3f(t_l[0] - 0.01, t_l[1] + 0.01, -0.05f);
+			glPushMatrix();
+				glTranslatef(cube_size / 2, cube_size / 2, 0); // Draws from centre, so translates so draws from bottom left corner
+				glTranslatef(b_l[0], b_l[1], 0.0f); // put cursor in bottom left corner of arena
+				draw_arena(cube_size); // Draws the whole arena
+			glPopMatrix();
+			glUseProgram(0);
+
+			glDisable(GL_LIGHTING); // Draw arena borders
+			/*
+			glBegin(GL_QUADS);
+				glColor4f(0.66f, 0.66f, 0.66f, 1.0f);
+
+				glVertex3f(b_r[0], b_r[1], -0.05f);
+				glVertex3f(b_l[0], b_l[1], -0.05f);
+				glVertex3f(t_l[0], t_l[1], -0.05f);
+				glVertex3f(t_r[0], t_r[1], -0.05f);
+			glEnd();
+			*/
+			glColor4f(0.0f, 1.0f, 0.0f, 0.5f);
+			glLineWidth(0.1f);
+			glBegin(GL_QUADS);
+				glVertex3f(t_l[0] - 0.01, t_l[1] + 0.01, 0.05f);
+				glVertex3f(b_l[0] - 0.01, b_l[1] - 0.01, 0.05f);
+				glVertex3f(b_l[0] - 0.01, b_l[1] - 0.01, -0.05f);
+				glVertex3f(t_l[0] - 0.01, t_l[1] + 0.01, -0.05f);
+				
+				glVertex3f(b_l[0] - 0.01, b_l[1] - 0.01, 0.05f);
+				glVertex3f(b_r[0] + 0.01, b_r[1] - 0.01, 0.05f);
+				glVertex3f(b_r[0] + 0.01, b_r[1] - 0.01, -0.05f);
+				glVertex3f(b_l[0] - 0.01, b_l[1] - 0.01, -0.05f);
 			
-			glVertex3f(b_l[0] - 0.01, b_l[1] - 0.01, 0.05f);
-			glVertex3f(b_r[0] + 0.01, b_r[1] - 0.01, 0.05f);
-			glVertex3f(b_r[0] + 0.01, b_r[1] - 0.01, -0.05f);
-			glVertex3f(b_l[0] - 0.01, b_l[1] - 0.01, -0.05f);
-		
-			glVertex3f(b_r[0] + 0.01, b_r[1] - 0.01, 0.05f);
-			glVertex3f(t_r[0] + 0.01, t_r[1] + 0.01, 0.05f);
-			glVertex3f(t_r[0] + 0.01, t_r[1] + 0.01, -0.05f);
-			glVertex3f(b_r[0] + 0.01, b_r[1] - 0.01, -0.05f);
-		glEnd();
+				glVertex3f(b_r[0] + 0.01, b_r[1] - 0.01, 0.05f);
+				glVertex3f(t_r[0] + 0.01, t_r[1] + 0.01, 0.05f);
+				glVertex3f(t_r[0] + 0.01, t_r[1] + 0.01, -0.05f);
+				glVertex3f(b_r[0] + 0.01, b_r[1] - 0.01, -0.05f);
+			glEnd();
 
-		glEnable(GL_LIGHTING);
-	glPopMatrix();
+			glEnable(GL_LIGHTING);
+		glPopMatrix();
+	}
 
 	glutSwapBuffers();
 }
@@ -417,19 +545,33 @@ void reshape(int w, int h) {
 	glutPostRedisplay();
 }
 
-void keyboard(unsigned char key, int, int) {
+void keyboard(unsigned char key, int, int) { // Debugging stuff for finding best pseudo 3d angle
 	switch (key) {
 		case 'q': exit(1); break;
 		case 'w': eye_y += 0.1f; break;
 		case 's': eye_y -= 0.1f; break;
 		case 'd': eye_x += 0.1f; break;
 		case 'a': eye_x -= 0.1f; break;
+		case ' ': 
+			//printf("Spacebar pressed\n"); 
+			speed_up = 0.1f;
+			break;
 	}
 	//printf("x: %f, y: %f", eye_x, eye_y);
 	glutPostRedisplay();
 }
 
+void keyboard_up(unsigned char key, int, int) {
+	switch(key) {
+		case ' ': 
+			//printf("Spacebar released\n");
+			speed_up = 1.0f;
+			break;
+	}
+}
+
 void special_up(int key, int, int) {
+	// Games tend to react to key up
 	switch(key) {
 		case GLUT_KEY_LEFT:
 			//printf("Left key released\n");
@@ -487,7 +629,7 @@ void init(int argc, char* argv[]) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
-	//init_material();
+	init_material();
 
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 }
@@ -500,6 +642,10 @@ int main(int argc, char* argv[]) {
 		}
 	}
 	*/
+
+	// seed random generator
+	srand(time(0));
+
 	// test blocks
 	c_type = rand() % 7 + 1;
 	spawn_block(c_type);
@@ -527,12 +673,13 @@ int main(int argc, char* argv[]) {
 #endif
 
 	glutKeyboardFunc(keyboard); 
+	glutKeyboardUpFunc(keyboard_up);
 	glutSpecialFunc(special);
 	glutSpecialUpFunc(special_up); // Detect key release
 	glutReshapeFunc(reshape); 
 	glutDisplayFunc(display); 
 	glutIdleFunc(NULL); 
-	glutTimerFunc((int)(1000.0f * difficulty), timer, 0);
+	glutTimerFunc((int)(1000.0f * difficulty * speed_up), timer, 0);
 	glutIgnoreKeyRepeat(1);
 
 	fprintf(stderr, "Open GL Engine = %s\nVersion =  %s\n", 

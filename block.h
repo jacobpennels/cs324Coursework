@@ -1,6 +1,7 @@
 /*
 This file defines the shapes of each block at all 4 possible rotations, allowing an easy way to manipulate the object
 during gameplay
+Each part of the shape is defined as a displacement from an 'origin', around which rotation occurs
 Uses SRS rotation - http://tetris.wikia.com/wiki/SRS
 */
 
@@ -47,7 +48,7 @@ const int s_block[4][4][2] = {
 };
 
 const int z_block[4][4][2] = {
-	{{0, 0}, {0, 1}, {1, 1}, {-1, 0}},
+	{{0, 0}, {0, 1}, {-1, 1}, {1, 0}},
 	{{0, 0}, {0, -1}, {1, 0}, {1, 1}},
 	{{0, 0}, {-1, 0}, {0, -1}, {1, -1}},
 	{{0, 0}, {0, 1}, {-1, 0}, {-1, -1}}
