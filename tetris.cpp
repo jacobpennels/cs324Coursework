@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include <unistd.h>
 #include <time.h>
+#include <sstream>
 
 #include "draw_text.h"
 #include "lights_material.h"
@@ -20,6 +21,7 @@
 float difficulty = 0.75f;
 float speed_up = 1.0f;
 bool game_over = false;
+int points = 0;
 
 float t_l[2] = {-0.4f, 0.9f};
 float t_r[2] = {0.4f, 0.9f};
@@ -383,6 +385,7 @@ void rotate_block(int dir) {
 void check_for_lines() {
 	// Checks for full lines, and clear them
 	// Uses naive gravity - blocks fall only by the number of line cleared below them
+	int num_lines = 0; // Keep track of lines cleared in one go
 	for(int j = 0; j < arena_h; j++) {
 		full_lines[j] = 1;
 		for(int i = 0; i < arena_w; i++) {
@@ -391,19 +394,16 @@ void check_for_lines() {
 			}
 		}
 	}
-	/*
-	for(int i = 0; i < arena_h; i++) {
-		printf("%d ", full_lines[i]);
-	}
-	printf("\n");
-	*/
+
 	for(int i = 0; i < arena_h; i++) {
 		if(full_lines[i] == 1) {
+			num_lines += 1;
 			for(int j = 0; j <  arena_w; j++) {
 				arena[j][i] = 0; // Clear the layer that needs to be cleared
 			}
 		}
 	}
+	//printf("NUMBER OF LINES TO CLEAR IS: %d\n", num_lines);
 
 	for(int i = arena_h - 1; i >= 0; i--) {
 		if(full_lines[i] == 1) {
@@ -415,6 +415,37 @@ void check_for_lines() {
 				}
 			}
 		}
+	}
+	// Calculate score based on number of lines cleared and difficulty level
+	int new_score = 0;
+	switch(num_lines) {
+		case 1:
+			new_score = 40;
+			break;
+		case 2:
+			new_score = 100;
+			break;
+		case 3:
+			new_score = 300;
+			break;
+		case 4:
+			new_score = 1200;
+			break;
+	}
+	//printf("%d\n", new_score);
+	switch((int)(difficulty * 100)) {
+		case 100: // very easy
+			points += new_score;
+			break;
+		case 75:
+			points += new_score * 2;
+			break;
+		case 50:
+			points += new_score * 3;
+			break;
+		case 25:
+			points += new_score * 4;
+			break;
 	}
 }
 
@@ -442,6 +473,10 @@ void timer(int) {
 	// This is run once a second and provides basic clock for moving the piece down
 	game_over = false;
 	if(c_type != 0) {
+		if(speed_up < 1.0f) {
+			// Soft drop
+			points += 1;
+		}
 		update_arena();
 	} else {
 		check_for_defeat();
@@ -459,6 +494,7 @@ void timer(int) {
 			reset_arena();
 			glutPostRedisplay();
 			glutTimerFunc(5000, timer, 0);
+			points = 0;
 			return;
 		}
 	}
@@ -480,7 +516,11 @@ void display() {
 	if(game_over) {
 		glDisable(GL_LIGHTING);
 	        // put some help on the screen
-	        draw_text(500, 500, "GAME OVER");
+	        draw_text(250, 550, "GAME OVER");
+
+	        std::stringstream oss;
+        	oss << "You scored " << points;
+        	draw_text(250, 450, (char*)oss.str().c_str());
 		glEnable(GL_LIGHTING);
 	} else {
 		glPushMatrix();
@@ -527,10 +567,15 @@ void display() {
 				glVertex3f(t_r[0] + 0.01, t_r[1] + 0.01, -0.05f);
 				glVertex3f(b_r[0] + 0.01, b_r[1] - 0.01, -0.05f);
 			glEnd();
-
-			glEnable(GL_LIGHTING);
 		glPopMatrix();
-	}
+
+		// show score
+	    std::stringstream oss;
+        oss << "POINTS: " << points;
+        draw_text(80, 80, (char*)oss.str().c_str());
+
+		glEnable(GL_LIGHTING);
+}
 
 	glutSwapBuffers();
 }
@@ -644,6 +689,43 @@ int main(int argc, char* argv[]) {
 	*/
 
 	// seed random generator
+	printf("#################################\n\n");
+	printf("        WELCOME TO TETRIS!       \n\n");
+	printf("#################################\n\n");
+	printf("Pick a difficulty:\n");
+	printf("1:	Very Easy\n");
+	printf("2:	Easy\n");
+	printf("3:	Medium\n");
+	printf("4:	Hard\n");
+	int a;
+	bool valid = false;
+
+	do {
+		printf("Enter difficulty: ");
+		scanf("%u", &a);
+
+		switch(a) {
+			case 1:
+				difficulty = 1.0f;
+				valid = true;
+				break;
+			case 2:
+				difficulty = 0.75f;
+				valid = true;
+				break;
+			case 3:
+				difficulty = 0.5f;
+				valid = true;
+				break;
+			case 4:
+				difficulty = 0.25f;
+				valid = true;
+				break;
+		}
+		if(!valid)
+			printf("Not a valid difficulty!\n");
+	} while(!valid);
+
 	srand(time(0));
 
 	// test blocks
