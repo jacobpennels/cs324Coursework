@@ -13,15 +13,18 @@
 #include <sstream>
 
 #include "draw_text.h"
-#include "lights_material.h"
 #include "create_and_compile_shaders.h"
 #include "block.h"
 //#include "tetris_control.h"
+
+// Method prototypes to allow nice countdown 
+void timer(int);
 
 float difficulty = 0.75f;
 float speed_up = 1.0f;
 bool game_over = false;
 int points = 0;
+int countdown = 0;
 
 float t_l[2] = {-0.4f, 0.9f};
 float t_r[2] = {0.4f, 0.9f};
@@ -42,6 +45,8 @@ const int arena_h = 22;
 const int arena_w = 10;
 int arena[arena_w][arena_h] = { 0 }; // [x][y] 10x20 grid with 2 on top for new pieces to spawn in
 const int spawn_point[2] = {4, 20};
+float arena_rotation = 0.0f;
+float angle_step = 1.0f;
 
 float cube_size = (height / 20.0f);
 
@@ -60,8 +65,6 @@ bool key_pressed = false;
 int key_id = 0; // 0 = none, 1 = left, 2 = right
 
 unsigned int g_program_obj = 0;
-
-float g_light0_position[] = {1.0f, 1.0f, 2.0f, 0.0f};
 
 void print_arena() {
 	for(int i = 0; i < arena_h; i++) {
@@ -287,7 +290,7 @@ void move_right() {
 		if(left_neighbour != 0 && left_neighbour != 8) {
 			clear = false;
 		}
-		if(temp_x + 1 > 9) {
+		if(temp_x + 1 > (arena_h - 1)) {
 			clear = false;
 		}
 	}
@@ -310,6 +313,7 @@ void move_right() {
 
 void rotate_block(int dir) {
 	// Follows SRS rotation rules, implements the 'wallkick' feature found in traditional tetris
+	// Wallkick only applies to edges of arena, not other blocks
 	if(dir) {
 		// Clockwise
 		c_rotation += 1;
@@ -433,6 +437,7 @@ void check_for_lines() {
 			break;
 	}
 	//printf("%d\n", new_score);
+	// Scale the score dependent on difficulty level
 	switch((int)(difficulty * 100)) {
 		case 100: // very easy
 			points += new_score;
@@ -445,6 +450,9 @@ void check_for_lines() {
 			break;
 		case 25:
 			points += new_score * 4;
+			break;
+		case 10:
+			points += new_score * 5;
 			break;
 	}
 }
@@ -469,14 +477,32 @@ void reset_arena() {
 	}
 }
 
-void timer(int) {
+void restart_countdown(int) {
+    countdown++;
+    glutPostRedisplay();
+    
+    if(countdown == 5)
+	glutTimerFunc(1000, timer, 1);
+    else
+	glutTimerFunc(1000, restart_countdown, 0);  
+}
+
+void timer(int z) {
 	// This is run once a second and provides basic clock for moving the piece down
+	if(z == 1)
+	    points = 0;
+	
 	game_over = false;
 	if(c_type != 0) {
 		if(speed_up < 1.0f) {
 			// Soft drop
 			points += 1;
 		}
+		arena_rotation += angle_step;
+		if(arena_rotation > 20.0f || arena_rotation < -20.0f) {
+		    angle_step *= -1.0f;
+		}
+		
 		update_arena();
 	} else {
 		check_for_defeat();
@@ -490,11 +516,11 @@ void timer(int) {
 			spawn_block(c_type);
 			speed_up = 1.0f; // Reset to normal fall rate
 		} else { // Game over
-			printf("GAME OVER\n");
+			//printf("GAME OVER\n");
 			reset_arena();
 			glutPostRedisplay();
-			glutTimerFunc(5000, timer, 0);
-			points = 0;
+			glutTimerFunc(1000, restart_countdown, 1);
+			//points = 0;
 			return;
 		}
 	}
@@ -521,6 +547,10 @@ void display() {
 	        std::stringstream oss;
         	oss << "You scored " << points;
         	draw_text(250, 450, (char*)oss.str().c_str());
+		
+		std::stringstream c;
+		c << "CONTINUE " << (5 - countdown);
+		draw_text(250, 250, (char*)c.str().c_str());
 		glEnable(GL_LIGHTING);
 	} else {
 		glPushMatrix();
@@ -593,10 +623,10 @@ void reshape(int w, int h) {
 void keyboard(unsigned char key, int, int) { // Debugging stuff for finding best pseudo 3d angle
 	switch (key) {
 		case 'q': exit(1); break;
-		case 'w': eye_y += 0.1f; break;
-		case 's': eye_y -= 0.1f; break;
-		case 'd': eye_x += 0.1f; break;
-		case 'a': eye_x -= 0.1f; break;
+		//case 'w': eye_y += 0.1f; break;
+		//case 's': eye_y -= 0.1f; break;
+		//case 'd': eye_x += 0.1f; break;
+		//case 'a': eye_x -= 0.1f; break;
 		case ' ': 
 			//printf("Spacebar pressed\n"); 
 			speed_up = 0.1f;
@@ -657,6 +687,43 @@ void special(int key, int, int) {
 	}
 }
 
+void setup_lights() {
+	float light0_position[] = {1.0, 1.0, 2.0, 0.0};
+	float light_ambient[] = {0.5, 0.5, 0.5, 1.0};
+	float light_diffuse[] = {0.5, 0.5, 0.5, 1.0};
+	float light_specular[] = {0.7, 0.7, 0.7, 1.0};
+
+	glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient);
+	glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse);
+	glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular);
+	glLightfv(GL_LIGHT0, GL_POSITION, light0_position);
+
+	glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, 0);
+
+	glFrontFace(GL_CW);
+
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0);
+
+	glEnable(GL_AUTO_NORMAL);
+	glEnable(GL_NORMALIZE);
+	glEnable(GL_DEPTH_TEST);
+
+
+	glShadeModel(GL_SMOOTH);
+}
+
+void setup_material() {
+	float mat_ambient[] = {0.05, 0.05, 0.05, 1.0};
+	float mat_diffuse[] = {0.75, 0.75, 0.75, 1.0};
+	float mat_specular[] = {1.0, 1.0, 1.0, 1.0};
+	float mat_shininess[] = {50.0};
+	glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
+	glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
+	glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
+	glMaterialfv(GL_FRONT, GL_SHININESS, mat_shininess);
+}
+
 void init(int argc, char* argv[]) {
 	if (argc==3)
 		g_program_obj = create_and_compile_shaders(argv[1], NULL, argv[2]);
@@ -670,11 +737,11 @@ void init(int argc, char* argv[]) {
 		set_geometry_shader_params(g_program_obj, GL_LINES, GL_LINE_STRIP, 4);
 	}
 
-	init_lights(GL_SMOOTH);
+	setup_lights();
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
-	init_material();
+	setup_material();
 
 	glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 }
@@ -697,6 +764,7 @@ int main(int argc, char* argv[]) {
 	printf("2:	Easy\n");
 	printf("3:	Medium\n");
 	printf("4:	Hard\n");
+	printf("5:	Impossible\n");
 	int a;
 	bool valid = false;
 
@@ -719,6 +787,10 @@ int main(int argc, char* argv[]) {
 				break;
 			case 4:
 				difficulty = 0.25f;
+				valid = true;
+				break;
+			case 5:
+				difficulty = 0.1f;
 				valid = true;
 				break;
 		}
